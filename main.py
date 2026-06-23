@@ -5,6 +5,9 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from playwright.sync_api import sync_playwright
 
+# FORZATURA ASSOLUTA: Diciamo a Playwright dove trovare i file sia in Build che in Live
+os.environ["PLAYWRIGHT_BROWSERS_PATH"] = "/opt/render/project/src/.playwright-browsers"
+
 app = FastAPI()
 
 app.add_middleware(
@@ -17,42 +20,21 @@ app.add_middleware(
 
 URL_GOOGLE_SCRIPT = "https://script.google.com/macros/s/AKfycbx7BIgETqlz8bq20eEwRSUHW1xHqqV5g7jqfsZWz0BkVdZj23idU8OAYr1aAFzg68cL/exec"
 
-def get_headless_executable():
-    """Trova in automatico il percorso reale del browser scaricato su Render"""
-    percorsi_possibili = [
-        "/opt/render/.cache/ms-playwright/chromium_headless_shell-1223/chrome-headless-shell-linux64/chrome-headless-shell",
-        "/opt/render/project/src/.playwright-browsers/chromium_headless_shell-1223/chrome-headless-shell-linux64/chrome-headless-shell",
-        "/root/.cache/ms-playwright/chromium_headless_shell-1223/chrome-headless-shell-linux64/chrome-headless-shell"
-    ]
-    for path in percorsi_possibili:
-        if os.path.exists(path):
-            print(f"[API] Trovato browser valido in: {path}")
-            return path
-    return None
-
 def scrape_jartex(username: str):
     modalita = "bedwars"
     url = f"https://stats.jartexnetwork.com/player/{username}/{modalita}"
     
-    percorso_browser = get_headless_executable()
-    
     with sync_playwright() as p:
-        # Se non trova la scorciatoia fissa, lascia decidere a Playwright fornendo i parametri headless di sicurezza
-        kwargs = {
-            "headless": True,
-            "args": [
+        # Ora l'avvio è pulito perché Playwright userà la variabile d'ambiente impostata sopra
+        browser = p.chromium.launch(
+            headless=True,
+            args=[
                 "--disable-blink-features=AutomationControlled",
                 "--no-sandbox",
                 "--disable-setuid-sandbox",
                 "--disable-dev-shm-usage"
             ]
-        }
-        if percorso_browser:
-            kwargs["executable_path"] = percorso_browser
-        else:
-            kwargs["channel"] = "chromium-headless-shell"
-            
-        browser = p.chromium.launch(**kwargs)
+        )
         context = browser.new_context(user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
         page = context.new_page()
         
