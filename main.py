@@ -6,7 +6,6 @@ from playwright.sync_api import sync_playwright
 
 app = FastAPI()
 
-# Permette al tuo sito GitHub di fare richieste a questa API senza blocchi CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -22,17 +21,28 @@ def scrape_jartex(username: str):
     url = f"https://stats.jartexnetwork.com/player/{username}/{modalita}"
     
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True, args=["--disable-blink-features=AutomationControlled"])
-        context = browser.new_context(user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+        # Aggiunti argomenti critici per far girare Chromium stabili su Linux/Render
+        browser = p.chromium.launch(
+            headless=True, 
+            args=[
+                "--disable-blink-features=AutomationControlled",
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--disable-dev-shm-usage"
+            ]
+        )
+        context = browser.new_context(user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
         page = context.new_page()
         
         try:
+            print(f"[API] Navigo su: {url}")
             page.goto(url, wait_until="domcontentloaded", timeout=30000)
-            time.sleep(5)  # Attesa caricamento dati
+            time.sleep(6)  # Tempo necessario per il caricamento delle tabelle dinamiche
             
             righe = page.locator("table tbody tr")
             num_righe = righe.count()
             
+            print(f"[API] Righe trovate nella tabella: {num_righe}")
             if num_righe == 0:
                 return None
                 
@@ -58,6 +68,9 @@ def scrape_jartex(username: str):
                         raw_data[nome_stat] = int(valore_pulito)
                     except ValueError:
                         raw_data[nome_stat] = valore_stat
+
+            if not raw_data:
+                return None
 
             highest_ws = 0
             for chiave, valore in raw_data.items():
@@ -91,14 +104,16 @@ def scrape_jartex(username: str):
                 "fkdr": fkdr
             }
             
+            # Invio dati a Google Sheets con gestione errore isolata
             try:
-                requests.post(URL_GOOGLE_SCRIPT, json=payload, timeout=5)
-            except Exception:
-                pass
+                requests.post(URL_GOOGLE_SCRIPT, json=payload, timeout=8)
+                print("[API] Dati inviati a Google Sheets con successo.")
+            except Exception as e_sheet:
+                print(f"[⚠️ Google Sheets Error] Impossibile aggiornare il foglio, ma restituisco comunque i dati al sito: {e_sheet}")
                 
             return payload
         except Exception as e:
-            print(f"Errore Scraper: {e}")
+            print(f"[❌ Scraper Error]: {e}")
             return None
         finally:
             context.close()
@@ -106,7 +121,11 @@ def scrape_jartex(username: str):
 
 @app.get("/api/stats/{username}")
 def get_stats(username: str):
-    dati = scrape_jartex(username.strip())
-    if not dati:
-        raise HTTPException(status_code=404, detail="Giocatore non trovato o errore nel recupero dati.")
-    return {"errore": False, "giocatore": dati["nickname"], "stats": dati}
+    try:
+        dati = scrape_jartex(username.strip())
+        if not dati:
+            raise HTTPException(status_code=404, detail="Giocatore non trovato su Jartex o struttura pagina cambiata.")
+        return {"errore": False, "giocatore": dati["nickname"], "stats": dati}
+    except Exception as general_error:
+        print(f"[💥 Critical Error]: {general_error}")
+        raise HTTPException(status_code=500, detail=str(general_error))
