@@ -3,14 +3,13 @@ import requests
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from playwright.sync_api import sync_playwright
-from pydantic import BaseModel
 
 app = FastAPI()
 
 # Permette al tuo sito GitHub di fare richieste a questa API senza blocchi CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Puoi mettere l'URL del tuo sito github.io per sicurezza
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -29,7 +28,7 @@ def scrape_jartex(username: str):
         
         try:
             page.goto(url, wait_until="domcontentloaded", timeout=30000)
-            time.sleep(5)  # Attesa per il caricamento del client-side render
+            time.sleep(5)  # Attesa caricamento dati
             
             righe = page.locator("table tbody tr")
             num_righe = righe.count()
@@ -92,11 +91,10 @@ def scrape_jartex(username: str):
                 "fkdr": fkdr
             }
             
-            # Invia asincronamente (o in background) i dati a Google Sheets
             try:
                 requests.post(URL_GOOGLE_SCRIPT, json=payload, timeout=5)
             except Exception:
-                pass # Non bloccare l'utente se lo Sheets è lento
+                pass
                 
             return payload
         except Exception as e:
@@ -112,13 +110,3 @@ def get_stats(username: str):
     if not dati:
         raise HTTPException(status_code=404, detail="Giocatore non trovato o errore nel recupero dati.")
     return {"errore": False, "giocatore": dati["nickname"], "stats": dati}
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
-
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
-        finally:
-            context.close()
-            browser.close()}
