@@ -1,12 +1,15 @@
+import os
 import time
 import requests
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from playwright.sync_api import sync_playwright
 
+# Comunichiamo a Playwright dove trovare i browser installati localmente
+os.environ["PLAYWRIGHT_BROWSERS_PATH"] = "./.playwright-browsers"
+
 app = FastAPI()
 
-# Permette al tuo sito GitHub di fare richieste a questa API senza blocchi CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -22,10 +25,9 @@ def scrape_jartex(username: str):
     url = f"https://stats.jartexnetwork.com/player/{username}/{modalita}"
     
     with sync_playwright() as p:
-        # Configurato con channel specifico per la versione headless scaricata da Render
+        # Ora punta alla cartella locale senza fare affidamento sulla cache di Render
         browser = p.chromium.launch(
             headless=True,
-            channel="chromium-headless-shell",
             args=[
                 "--disable-blink-features=AutomationControlled",
                 "--no-sandbox",
@@ -39,7 +41,7 @@ def scrape_jartex(username: str):
         try:
             print(f"[API] Navigo su: {url}")
             page.goto(url, wait_until="domcontentloaded", timeout=30000)
-            time.sleep(6)  # Attesa per il caricamento delle tabelle AJAX di Jartex
+            time.sleep(6)
             
             righe = page.locator("table tbody tr")
             num_righe = righe.count()
@@ -106,7 +108,6 @@ def scrape_jartex(username: str):
                 "fkdr": fkdr
             }
             
-            # Invio asincrono simulato a Google Sheets (isolato per non bloccare la risposta web)
             try:
                 requests.post(URL_GOOGLE_SCRIPT, json=payload, timeout=8)
                 print("[API] Dati inviati a Google Sheets.")
