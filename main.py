@@ -5,9 +5,6 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from playwright.sync_api import sync_playwright
 
-# Comunichiamo a Playwright dove trovare i browser installati localmente
-os.environ["PLAYWRIGHT_BROWSERS_PATH"] = "./.playwright-browsers"
-
 app = FastAPI()
 
 app.add_middleware(
@@ -24,9 +21,12 @@ def scrape_jartex(username: str):
     modalita = "bedwars"
     url = f"https://stats.jartexnetwork.com/player/{username}/{modalita}"
     
+    # FORZATURA: Indichiamo il percorso preciso dell'eseguibile Linux installato da Render nella cartella di build
+    percorso_browser = "/opt/render/project/src/.playwright-browsers/chromium_headless_shell-1223/chrome-headless-shell-linux64/chrome-headless-shell"
+    
     with sync_playwright() as p:
-        # Ora punta alla cartella locale senza fare affidamento sulla cache di Render
         browser = p.chromium.launch(
+            executable_path=percorso_browser,
             headless=True,
             args=[
                 "--disable-blink-features=AutomationControlled",
