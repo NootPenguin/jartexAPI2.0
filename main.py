@@ -17,24 +17,42 @@ app.add_middleware(
 
 URL_GOOGLE_SCRIPT = "https://script.google.com/macros/s/AKfycbx7BIgETqlz8bq20eEwRSUHW1xHqqV5g7jqfsZWz0BkVdZj23idU8OAYr1aAFzg68cL/exec"
 
+def get_headless_executable():
+    """Trova in automatico il percorso reale del browser scaricato su Render"""
+    percorsi_possibili = [
+        "/opt/render/.cache/ms-playwright/chromium_headless_shell-1223/chrome-headless-shell-linux64/chrome-headless-shell",
+        "/opt/render/project/src/.playwright-browsers/chromium_headless_shell-1223/chrome-headless-shell-linux64/chrome-headless-shell",
+        "/root/.cache/ms-playwright/chromium_headless_shell-1223/chrome-headless-shell-linux64/chrome-headless-shell"
+    ]
+    for path in percorsi_possibili:
+        if os.path.exists(path):
+            print(f"[API] Trovato browser valido in: {path}")
+            return path
+    return None
+
 def scrape_jartex(username: str):
     modalita = "bedwars"
     url = f"https://stats.jartexnetwork.com/player/{username}/{modalita}"
     
-    # FORZATURA: Indichiamo il percorso preciso dell'eseguibile Linux installato da Render nella cartella di build
-    percorso_browser = "/opt/render/project/src/.playwright-browsers/chromium_headless_shell-1223/chrome-headless-shell-linux64/chrome-headless-shell"
+    percorso_browser = get_headless_executable()
     
     with sync_playwright() as p:
-        browser = p.chromium.launch(
-            executable_path=percorso_browser,
-            headless=True,
-            args=[
+        # Se non trova la scorciatoia fissa, lascia decidere a Playwright fornendo i parametri headless di sicurezza
+        kwargs = {
+            "headless": True,
+            "args": [
                 "--disable-blink-features=AutomationControlled",
                 "--no-sandbox",
                 "--disable-setuid-sandbox",
                 "--disable-dev-shm-usage"
             ]
-        )
+        }
+        if percorso_browser:
+            kwargs["executable_path"] = percorso_browser
+        else:
+            kwargs["channel"] = "chromium-headless-shell"
+            
+        browser = p.chromium.launch(**kwargs)
         context = browser.new_context(user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
         page = context.new_page()
         
