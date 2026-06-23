@@ -6,6 +6,7 @@ from playwright.sync_api import sync_playwright
 
 app = FastAPI()
 
+# Permette al tuo sito GitHub di fare richieste a questa API senza blocchi CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -21,9 +22,10 @@ def scrape_jartex(username: str):
     url = f"https://stats.jartexnetwork.com/player/{username}/{modalita}"
     
     with sync_playwright() as p:
-        # Aggiunti argomenti critici per far girare Chromium stabili su Linux/Render
+        # Configurato con channel specifico per la versione headless scaricata da Render
         browser = p.chromium.launch(
-            headless=True, 
+            headless=True,
+            channel="chromium-headless-shell",
             args=[
                 "--disable-blink-features=AutomationControlled",
                 "--no-sandbox",
@@ -37,7 +39,7 @@ def scrape_jartex(username: str):
         try:
             print(f"[API] Navigo su: {url}")
             page.goto(url, wait_until="domcontentloaded", timeout=30000)
-            time.sleep(6)  # Tempo necessario per il caricamento delle tabelle dinamiche
+            time.sleep(6)  # Attesa per il caricamento delle tabelle AJAX di Jartex
             
             righe = page.locator("table tbody tr")
             num_righe = righe.count()
@@ -104,12 +106,12 @@ def scrape_jartex(username: str):
                 "fkdr": fkdr
             }
             
-            # Invio dati a Google Sheets con gestione errore isolata
+            # Invio asincrono simulato a Google Sheets (isolato per non bloccare la risposta web)
             try:
                 requests.post(URL_GOOGLE_SCRIPT, json=payload, timeout=8)
-                print("[API] Dati inviati a Google Sheets con successo.")
+                print("[API] Dati inviati a Google Sheets.")
             except Exception as e_sheet:
-                print(f"[⚠️ Google Sheets Error] Impossibile aggiornare il foglio, ma restituisco comunque i dati al sito: {e_sheet}")
+                print(f"[⚠️ Google Sheets Error]: {e_sheet}")
                 
             return payload
         except Exception as e:
@@ -124,8 +126,15 @@ def get_stats(username: str):
     try:
         dati = scrape_jartex(username.strip())
         if not dati:
-            raise HTTPException(status_code=404, detail="Giocatore non trovato su Jartex o struttura pagina cambiata.")
+            return {
+                "errore": True, 
+                "messaggio": "Giocatore non trovato su Jartex o nessuna statistica Bedwars attiva."
+            }
         return {"errore": False, "giocatore": dati["nickname"], "stats": dati}
     except Exception as general_error:
-        print(f"[💥 Critical Error]: {general_error}")
-        raise HTTPException(status_code=500, detail=str(general_error))
+        print(f"[ Critical Error]: {general_error}")
+        return {
+            "errore": True, 
+            "dettaglio_tecnico": str(general_error),
+            "messaggio": "Errore interno dell'API durante l'elaborazione."
+        }
